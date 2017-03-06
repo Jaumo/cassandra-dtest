@@ -1032,7 +1032,36 @@ class TestMaterializedViews(Tester):
 
         debug('Start node2, and repair')
         node2.start(wait_other_notice=True, wait_for_binary_proto=True)
-        node1.repair()
+
+        debug('Run repair again. Repair stream expected')
+        node1.repair(["-tr", "ks"])
+
+        session = self.patient_cql_connection(node1)
+        rows = list(session.execute("SELECT session_id, command FROM system_traces.sessions"))
+        assert_equal(1, len(rows), "Expected single repair session")
+        session_id = rows[0][0]
+        assert_equal("REPAIR", rows[0][1])
+        rows = list(session.execute("SELECT activity FROM system_traces.events WHERE session_id = {} AND activity = 'Streaming session with /127.0.0.2 prepared' ALLOW FILTERING".format(session_id)))
+        assert_equal(2, len(rows), "Expected 2 repair streams")
+
+        # See CASSANDRA-12888, incremental repair broken with MV/CDC.
+        # Check if 2nd run produces repair stream again
+        debug('Run repair again. No data should be streamed')
+        node1.repair(["-tr", "ks"])
+
+        session = self.patient_cql_connection(node1)
+        rows = list(session.execute("SELECT session_id, command FROM system_traces.sessions"))
+        assert_equal(2, len(rows), "Expected single repair session")
+        if rows[0][0] == session_id:
+            session_id2 = rows[1][0]
+        else:
+            session_id2 = rows[0][0]
+
+        assert_equal("REPAIR", rows[0][1])
+        assert_equal("REPAIR", rows[1][1])
+
+        rows = list(session.execute("SELECT activity FROM system_traces.events WHERE session_id = {} AND activity = 'Streaming session with /127.0.0.2 prepared' ALLOW FILTERING".format(session_id2)))
+        assert_equal(0, len(rows), "Expected no repair streams")
 
         debug('Verify the data in the MV with CL=ONE. All should be available now.')
         for i in xrange(1000):
