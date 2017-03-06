@@ -1005,13 +1005,14 @@ class TestMaterializedViews(Tester):
         debug('Shutdown node2')
         node2.stop(wait_other_notice=True)
 
-        for i in xrange(1000):
+        rowcount = 100
+        for i in xrange(rowcount):
             session.execute("INSERT INTO t (id, v, v2, v3) VALUES ({v}, {v}, 'a', 3.0)".format(v=i))
 
         self._replay_batchlogs()
 
         debug('Verify the data in the MV with CL=ONE')
-        for i in xrange(1000):
+        for i in xrange(rowcount):
             assert_one(
                 session,
                 "SELECT * FROM t_by_v WHERE v = {}".format(i),
@@ -1019,7 +1020,7 @@ class TestMaterializedViews(Tester):
             )
 
         debug('Verify the data in the MV with CL=ALL. All should be unavailable.')
-        for i in xrange(1000):
+        for i in xrange(rowcount):
             statement = SimpleStatement(
                 "SELECT * FROM t_by_v WHERE v = {}".format(i),
                 consistency_level=ConsistencyLevel.ALL
@@ -1064,10 +1065,10 @@ class TestMaterializedViews(Tester):
         assert_equal(0, len(rows), "Expected no repair streams")
 
         debug('Verify the data in the MV with CL=ONE. All should be available now.')
-        for i in xrange(1000):
+        for i in xrange(rowcount):
             assert_one(
                 session,
-                "SELECT * FROM t_by_v WHERE v = {}".format(i),
+                "SELECT * FROM ks.t_by_v WHERE v = {}".format(i),
                 [i, i, 'a', 3.0],
                 cl=ConsistencyLevel.ONE
             )
